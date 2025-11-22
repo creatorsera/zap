@@ -107,6 +107,9 @@ def scrape_url(url):
     except Exception as e:
         if not use_selenium or not SELENIUM_AVAILABLE:
             return {"emails": [], "blog": False, "niche": "Other", "status": "error"}
+            except Exception as e:
+    st.error(f"Debug for {url}: {str(e)[:100]}")  # Shows errors in sidebar
+    return {"emails": [], "blog": False, "niche": "Other", "status": "error"}
         try:
             opts = Options()
             for a in ["--headless","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]:
