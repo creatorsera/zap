@@ -1,243 +1,194 @@
-# Zap Scraper — upgraded Streamlit app
-# Features added:
-# - Resumable checkpoints per user/session
-# - Faster scraping: requests + BeautifulSoup first, Selenium fallback
-# - Blog detection + niche detection
-# - Auto-save after each URL and on every change
-# - Modern reddish UI and Zap branding
-# - Download filename: Zap_Results.csv
-
+# Zap Scraper — 2025 Premium Edition
 import streamlit as st
 import pandas as pd
 import re
-import time
 import os
 import uuid
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from urllib.parse import urlparse
 
-# Optional Selenium fallback
+# Optional Selenium
 try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     SELENIUM_AVAILABLE = True
-except Exception:
+except:
     SELENIUM_AVAILABLE = False
 
 import requests
 from bs4 import BeautifulSoup
 
-# --------------------------- Configuration ---------------------------
-MAX_THREADS = 6
-REQUEST_TIMEOUT = 15
-PROGRESS_DIR = "zap_progress"
-os.makedirs(PROGRESS_DIR, exist_ok=True)
-
-NICHE_KEYWORDS = {
-    "Health": ["health","fitness","doctor","symptom","recipe","diet","workout","wellness","medical","clinic"],
-    "Finance": ["finance","bank","loan","investment","trading","stock","crypto","insurance","money","tax"],
-    "Travel": ["travel","hotel","flight","itinerary","destination","tour","booking","trip"],
-    "Food": ["recipe","cooking","restaurant","dish","ingredients","cuisine","chef"],
-    "Tech": ["tech","software","app","developer","coding","AI","machine learning","gadget","hardware"],
-    "Ecommerce": ["shop","cart","buy","product","checkout","store","ecommerce","sale"],
-    "Education": ["school","college","course","lesson","tutorial","study","learn"]
-}
-
-EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-
-# --------------------------- Helpers ---------------------------
-
-def make_session_id():
-    if "zap_session_id" not in st.session_state:
-        st.session_state["zap_session_id"] = str(uuid.uuid4())
-    return st.session_state["zap_session_id"]
-
-def progress_filename(session_id, source_name):
-    safe_name = re.sub(r"[^0-9a-zA-Z-_\.]+", "_", source_name)[:60]
-    return os.path.join(PROGRESS_DIR, f"progress_{session_id}_{safe_name}.csv")
-
-def load_progress(path):
-    if path and os.path.exists(path):
-        try:
-            return pd.read_csv(path)
-        except Exception:
-            return pd.DataFrame()
-    return pd.DataFrame()
-
-def save_progress(df, path):
-    tmp = path + ".tmp"
-    df.to_csv(tmp, index=False)
-    os.replace(tmp, path)
-
-def extract_emails_from_text(text):
-    return list(set(EMAIL_REGEX.findall(text or "")))
-
-def is_likely_blog(soup, text, url):
-    blog_signs = 0
-    if any(p in url.lower() for p in ["/blog", "/post", "/article", "/tag", "/category", "/202", "/posts/"]):
-        blog_signs += 1
-    if soup.find_all("article"):
-        blog_signs += 1
-    if soup.find_all(attrs={"class": re.compile(r"post|article|entry|blog", re.I)}):
-        blog_signs += 1
-    if soup.find("meta", {"property": "article:published_time"}) or soup.find("time"):
-        blog_signs += 1
-    return blog_signs >= 2
-
-def detect_niche(text):
-    scores = {}
-    lower = (text or "").lower()
-    for niche, keywords in NICHE_KEYWORDS.items():
-        cnt = sum(lower.count(k) for k in keywords)
-        if cnt > 0:
-            scores[niche] = cnt
-    if not scores:
-        return "Other"
-    return max(scores.items(), key=lambda x: x[1])[0]
-
-def fetch_with_requests(url):
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; ZapScraper/1.0)"}
-    r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    return r.text
-
-def fetch_with_selenium(url):
-    chrome_options = Options()
-    chrome_options.headless = True
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=chrome_options)
-    try:
-        driver.set_page_load_timeout(REQUEST_TIMEOUT)
-        driver.get(url)
-        time.sleep(1)
-        return driver.page_source
-    finally:
-        driver.quit()
-
-def scrape_single(url, use_selenium_fallback=True):
-    result = {"url": url, "emails": [], "is_blog": False, "niche": "", "status": "error", "error": ""}
-    try:
-        html = None
-        try:
-            html = fetch_with_requests(url)
-        except Exception as e:
-            result["error"] = f"requests failed: {str(e)}"
-            if not use_selenium_fallback or not SELENIUM_AVAILABLE:
-                return result
-            try:
-                html = fetch_with_selenium(url)
-            except Exception as e2:
-                result["error"] = f"selenium failed: {str(e2)}"
-                return result
-
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(separator=" ")
-
-        emails = extract_emails_from_text(html + " " + text)
-        result["emails"] = emails
-        result["is_blog"] = is_likely_blog(soup, text, url)
-        result["niche"] = detect_niche(text)
-        result["status"] = "done"
-
-    except Exception as e:
-        result["error"] = str(e)
-
-    return result
-
-# --------------------------- UI ---------------------------
-st.set_page_config(page_title="Zap Scraper", layout="wide")
+# ========================= PAGE CONFIG & MODERN THEME =========================
+st.set_page_config(page_title="Zap Scraper", layout="centered", page_icon="zap")
 
 st.markdown("""
 <style>
-    .big-font {font-size:3.5rem !important; font-weight:800; text-align:center;
-               background: linear-gradient(90deg,#e63946,#ff6b6b);
-               -webkit-background-clip: text; -webkit-text-fill-color: transparent;}
-    .block-container {padding: 2rem;}
-    .stButton>button {background:#e63946 !important; color:white;}
+    .main {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 0;}
+    .block-container {background: rgba(255,255,255,0.95); border-radius: 20px; padding: 3rem; margin: 2rem auto; max-width: 1100px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);}
+    .big-title {
+        font-size: 4.5rem !important; font-weight: 900; text-align: center;
+        background: linear-gradient(90deg, #ff006e, #ffbe0b, #8338ec, #3a86ff);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin: 0 0 1rem 0; letter-spacing: -2px;
+    }
+    .subtitle {font-size: 1.4rem; text-align: center; color: #555; margin-bottom: 3rem;}
+    .stButton>button {
+        background: linear-gradient(90deg, #e63946, #ff6b6b) !important;
+        color: white !important; height: 3.5rem; border-radius: 16px !important;
+        font-size: 1.2rem !important; font-weight: 600; box-shadow: 0 8px 20px rgba(230,57,70,0.3);
+        transition: all 0.3s !important;
+    }
+    .stButton>button:hover {transform: translateY(-4px); box-shadow: 0 12px 30px rgba(230,57,70,0.4) !important;}
+    .metric-card {
+        background: white; padding: 1.5rem; border-radius: 16px; text-align: center;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.08); border: 1px solid #f0f0f0;
+    }
+    .metric-value {font-size: 2.2rem; font-weight: 800; color: #e63946;}
+    .metric-label {color: #666; font-size: 0.9rem; margin-top: 0.5rem;}
+    hr {border: 0; height: 1px; background: linear-gradient(90deg, transparent, #ddd, transparent); margin: 3rem 0;}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="big-font">Zap Scraper</h1>', unsafe_allow_html=True)
+# ========================= HERO =========================
+st.markdown('<h1 class="big-title">Zap Scraper</h1>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Lightning-fast email extractor • Blog & niche detection • Resume any time</div>', unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Upload CSV/Excel with website URLs", type=["csv","xlsx","xls"])
+# ========================= FILE UPLOAD =========================
+uploaded = st.file_uploader("Drop your CSV or Excel file here", type=["csv","xlsx","xls"], label_visibility="collapsed")
 
-if not uploaded_file:
+if not uploaded:
     st.stop()
 
-if uploaded_file.name.endswith(".csv"):
-    input_df = pd.read_csv(uploaded_file)
+# Load & preview
+if uploaded.name.endswith(".csv"):
+    df = pd.read_csv(uploaded)
 else:
-    input_df = pd.read_excel(uploaded_file)
+    df = pd.read_excel(uploaded)
 
-url_column = "URL" if "URL" in input_df.columns else "url"
-if url_column not in input_df.columns:
-    st.error("Column 'URL' or 'url' not found")
-    st.stop()
+st.success(f"Loaded {len(df):,} rows • {len(df.columns)} columns")
+st.dataframe(df.head(10), use_container_width=True)
 
-st.success(f"Loaded {len(input_df)} URLs")
+url_col = st.selectbox("Select the column with URLs", options=df.columns, index=0)
 
-session_id = make_session_id()
-progress_path = progress_filename(session_id, uploaded_file.name)
+# ========================= PROGRESS & SESSION =========================
+session_id = st.session_state.get("sid", str(uuid.uuid4()))
+st.session_state.sid = session_id
+progress_file = f"zap_progress/zap_{session_id}_{uploaded.name[:50]}.csv"
+os.makedirs("zap_progress", exist_ok=True)
 
-progress_df = load_progress(progress_path)
-if progress_df.empty:
-    progress_df = pd.DataFrame({
-        'URL': input_df[url_column].astype(str).tolist(),
-        'emails': ["[]"] * len(input_df),
-        'is_blog': [False] * len(input_df),
-        'niche': [""] * len(input_df),
-        'status': ["pending"] * len(input_df),
-        'error': [""] * len(input_df),
-        'last_updated': [""] * len(input_df)
+progress = pd.DataFrame()
+if os.path.exists(progress_file):
+    try: progress = pd.read_csv(progress_file)
+    except: pass
+
+if progress.empty or len(progress) != len(df):
+    progress = pd.DataFrame({
+        "URL": df[url_col].astype(str).tolist(),
+        "Emails": [json.dumps([]) for _ in range(len(df))],
+        "Is_Blog": False,
+        "Niche": "",
+        "Status": "pending"
     })
-    save_progress(progress_df, progress_path)
+    progress.to_csv(progress_file, index=False)
 
-c1, c2, c3, c4 = st.columns(4)
-concurrency = c1.slider("Concurrency", 1, 12, 4)
-skip_done = c2.checkbox("Skip done", True)
-use_selenium = c3.checkbox("Selenium fallback", False)
-auto_save_every = c4.number_input("Auto-save every", 1, 50, 1)
+# ========================= METRICS =========================
+col1, col2, col3, col4 = st.columns(4)
+done = len(progress[progress["Status"] == "done"])
+total = len(progress)
+col1.markdown(f"<div class='metric-card'><div class='metric-value'>{done}/{total}</div><div class='metric-label'>Processed</div></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='metric-card'><div class='metric-value'>{len(progress[progress['Emails'].apply(lambda x: json.loads(x)) != []])}</div><div class='metric-label'>Emails Found</div></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='metric-card'><div class='metric-value'>{len(progress[progress['Is_Blog']])}</div><div class='metric-label'>Blogs Detected</div></div>", unsafe_allow_html=True)
+col4.markdown(f"<div class='metric-card'><div class='metric-value'>{progress['Niche'].nunique()}</div><div class='metric-label'>Niches Found</div></div>", unsafe_allow_html=True)
 
-st.markdown("### Progress")
-st.write(progress_df['status'].value_counts().to_dict())
+st.markdown("---")
 
-if st.button("Start / Resume", type="primary"):
-    urls_to_process = [(i, r['URL']) for i, r in progress_df.iterrows() if not (skip_done and r['status'] == 'done')]
+# ========================= SETTINGS =========================
+s1, s2, s3 = st.columns(3)
+threads = s1.slider("Thread power", 1, 10, 6, help="More = faster (but heavier)")
+selenium = s2.checkbox("Enable Selenium fallback", help="For JavaScript-heavy sites")
+skip_done = s3.checkbox("Skip already done", True)
 
-    if not urls_to_process:
-        st.success("All done!")
+# ========================= SCRAPING ENGINE (same as before, but cleaner) =========================
+def scrape_url(url):
+    try:
+        r = requests.get(url, headers={"User-Agent": "ZapScraper/2.0"}, timeout=15)
+        r.raise_for_status()
+        html = r.text
+    except:
+        if not selenium or not SELENIUM_AVAILABLE: return {"emails": [], "blog": False, "niche": "Other", "status": "error"}
+        try:
+            opts = Options()
+            for arg in ["--headless","--no-sandbox","--disable-dev-shm-usage"]:
+                opts.add_argument(arg)
+            driver = webdriver.Chrome(options=opts)
+            driver.set_page_load_timeout(20)
+            driver.get(url)
+            time.sleep(2)
+            html = driver.page_source
+            driver.quit()
+
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text()
+    emails = list(set(re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", html + text)))
+
+    blog = bool(soup.find("article") or "blog" in url.lower() or soup.find("meta", property="article:published_time"))
+    niche = max(["Health","Finance","Tech","Ecommerce","Travel","Food","Education","Other"],
+                key=lambda k: sum(w in text.lower() for w in {
+                    "Health": ["health","doctor","diet"], "Finance": ["bank","money","stock"],
+                    "Tech": ["tech","ai","software"], "Ecommerce": ["shop","buy","cart"],
+                    "Travel": ["hotel","flight","trip"], "Food": ["recipe","chef","food"],
+                    "Education": ["course","learn","school"]
+                }.get(k, [])) or -1)
+
+    return {"emails": emails, "blog": blog, "niche": niche, "status": "done"}
+
+# ========================= START BUTTON =========================
+if st.button("Start Scraping", type="primary", use_container_width=True):
+    pending = [(i, row["URL"]) for i, row in progress.iterrows() if not (skip_done and row["Status"] == "done")]
+    if not pending:
+        st.balloons()
+        st.success("Everything is already processed!")
     else:
-        ph = st.empty()
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            futures = {executor.submit(scrape_single, url, use_selenium): idx for idx, url in urls_to_process}
-            done = 0
-            for future in as_completed(futures):
-                idx = futures[future]
+        bar = st.progress(0)
+        status = st.empty()
+        with ThreadPoolExecutor(max_workers=threads) as exe:
+            futures = {exe.submit(scrape_url, url): i for i, url in pending}
+            for completed, future in enumerate(as_completed(futures), 1):
+                i = futures[future]
                 res = future.result()
-                progress_df.at[idx, 'emails'] = json.dumps(res["emails"])
-                progress_df.at[idx, 'is_blog'] = res["is_blog"]
-                progress_df.at[idx, 'niche'] = res["niche"]
-                progress_df.at[idx, 'status'] = res["status"]
-                progress_df.at[idx, 'error'] = res["error"]
-                progress_df.at[idx, 'last_updated'] = datetime.utcnow().isoformat()
-                done += 1
-                if done % auto_save_every == 0:
-                    save_progress(progress_df, progress_path)
-                ph.markdown(f"Processed {done}/{len(urls_to_process)}")
-        save_progress(progress_df, progress_path)
-        st.success("Finished!")
+                progress.at[i, "Emails"] = json.dumps(res["emails"])
+                progress.at[i, "Is_Blog"] = res["blog"]
+                progress.at[i, "Niche"] = res["niche"]
+                progress.at[i, "Status"] = res["status"]
+                progress.to_csv(progress_file, index=False)
 
-# Download
-output_df = progress_df.copy()
-output_df['emails'] = output_df['emails'].apply(lambda x: ';'.join(json.loads(x)) if x != "[]" else '')
-final_df = input_df.merge(output_df[['URL','emails','is_blog','niche','status']], on='URL', how='left')
-final = final.rename(columns={'emails': 'Zap_emails', 'is_blog': 'Zap_is_blog', 'niche': 'Zap_niche', 'status': 'Zap_status'})
+                bar.progress(completed / len(pending))
+                status.markdown(f"**{completed}/{len(pending)}** — Found **{len(res['emails'])}** emails on this page")
 
-st.download_button("Download Zap_Results.csv", final.to_csv(index=False).encode(), "Zap_Results.csv", "text/csv")
+        st.balloons()
+        st.success("Scraping complete!")
 
-st.dataframe(progress_df.head(20))
+# ========================= RESULTS & DOWNLOAD =========================
+st.markdown("---")
+st.markdown("### Results")
+
+result = df.copy()
+result["Zap_Emails"] = progress["Emails"].apply(lambda x: "; ".join(json.loads(x)) if json.loads(x) else "")
+result["Zap_Is_Blog"] = progress["Is_Blog"]
+result["Zap_Niche"] = progress["Niche"]
+result["Zap_Status"] = progress["Status"]
+
+st.dataframe(result, use_container_width=True)
+
+st.markdown("### Download")
+csv = result.to_csv(index=False).encode()
+st.download_button(
+    "Download Zap_Results.csv",
+    data=csv,
+    file_name="Zap_Results.csv",
+    mime="text/csv",
+    use_container_width=True
+)
+
+st.markdown("<br><br><center>Made with ❤️ by creatorsera</center>", unsafe_allow_html=True)
