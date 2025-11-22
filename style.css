@@ -1,0 +1,95 @@
+/* Zap Scraper - Modern Red UI Theme */
+
+:root {
+  --zap-red: #e63946;
+  --zap-red-light: #ff6b6b;
+  --zap-dark: #1a1a1a;
+  --zap-gray: #f5f5f5;
+  --zap-bg: #ffffff;
+  --zap-card: #ffffff;
+  --zap-shadow: rgba(0, 0, 0, 0.08);
+  --radius: 14px;
+  --transition: 0.25s ease;
+}
+
+body {
+  background: var(--zap-gray);
+  font-family: "Inter", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Main container */
+.block-container {
+  padding: 2rem 3rem !important;
+}
+
+/* Header */
+#zap-header {
+  text-align: center;
+  padding: 20px 0;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--zap-red);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Card UI */
+.zap-card {
+  background: var(--zap-card);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px var(--zap-shadow);
+  margin-bottom: 1.5rem;
+  transition: var(--transition);
+}
+
+.zap-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px var(--zap-shadow);
+}
+
+/* Buttons */
+button, .stButton>button {
+  background: var(--zap-red) !important;
+  color: white !important;
+  padding: 0.7rem 1.4rem !important;
+  border-radius: var(--radius) !important;
+  font-weight: 600 !important;
+  border: none !important;
+  transition: var(--transition) !important;
+}
+
+button:hover, .stButton>button:hover {
+  background: var(--zap-red-light) !important;
+  transform: translateY(-2px);
+}
+
+/* Inputs */
+.stTextInput>div>div>input,
+.stTextArea textarea,
+.stSelectbox>div>div {
+  border-radius: var(--radius) !important;
+  padding: 0.6rem !important;
+  border: 1px solid #ddd !important;
+}
+
+/* Progress Bar */
+[data-testid="stProgressBar"] div div {
+  background-color: var(--zap-red) !important;
+}
+
+/* Table */
+[data-testid="stDataFrame"] table {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Footer */
+#zap-footer {
+  margin-top: 2rem;
+  text-align: center;
+  color: #777;
+  font-size: 0.9rem;
+}
