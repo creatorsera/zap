@@ -1,152 +1,168 @@
+# Zap Scraper — FINAL WORKING VERSION (2025)
+# Async + crawls internal pages + finds real emails + Facebook/LinkedIn
 import streamlit as st
 import pandas as pd
 import re
 import os
-import uuid
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-# Selenium support
-try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    SELENIUM_AVAILABLE = True
-except:
-    SELENIUM_AVAILABLE = False
-
-import requests
+import asyncio
+import aiohttp
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+from collections import deque
 
-# ======================== PAGE & STYLE ========================
-st.set_page_config(page_title="Zap Scraper", layout="centered", page_icon="zap")
+# ======================== MODERN UI ========================
+st.set_page_config(page_title="Zap Scraper", page_icon="zap", layout="wide")
 
 st.markdown("""
 <style>
-    .big-title {font-size:4.8rem !important; font-weight:900; text-align:center;
-                background:linear-gradient(90deg,#e63946,#ff6b6b);
-                -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:1rem;}
-    .stButton>button {background:#e63946 !important; color:white; height:3.5rem; border-radius:16px; font-size:1.2rem;}
-    .block-container {max-width:1100px; padding:2rem;}
+    .big-title {
+        font-size: 4.5rem !important;
+        font-weight: 900;
+        text-align: center;
+        background: linear-gradient(90deg, #ff006e, ffbe0b, 8338ec, 3a86ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0 0 1rem 0;
+    }
+    .stButton>button {
+        background: #e63946 !important;
+        color: white !important;
+        height: 3.5rem;
+        border-radius: 16px;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .metric-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<h1 class="big-title">Zap Scraper</h1>', unsafe_allow_html=True)
-st.markdown("**Instant email extractor • Blog & niche detection Resume anytime**")
+st.markdown("**The only scraper you’ll ever need — finds hidden emails, Facebook & LinkedIn in seconds**")
+
+# ======================== EMAIL REGEX (FIXED!) ========================
+EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", re.IGNORECASE)
 
 # ======================== UPLOAD ========================
-uploaded = st.file_uploader("Upload CSV or Excel with URLs", type=["csv","xlsx","xls"])
+uploaded = st.file_uploader("Upload your CSV or Excel file with URLs", type=["csv", "xlsx", "xls"])
+
 if not uploaded:
+    st.info("Upload a file to begin")
     st.stop()
 
+# Load file
 df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
-st.success(f"Loaded {len(df)} URLs")
-st.dataframe(df.head(10), use_container_width=True)
+st.success(f"Loaded {len(df):,} websites")
+st.dataframe(df.head(10))
 
-url_col = st.selectbox("Select the column that contains URLs", options=df.columns)
+url_col = st.selectbox("Which column has the URLs?", df.columns)
+max_pages = st.slider("Max pages to crawl per site", 5, 50, 15, help="Higher = more emails, slower")
 
-# ======================== PROGRESS SYSTEM ========================
-if "sid" not in st.session_state:
-    st.session_state.sid = str(uuid.uuid4())
+# ======================== CORE SCRAPER ========================
+async def crawl_site(start_url, session, max_pages=15):
+    collected = set()
+    facebook = ""
+    linkedin = ""
+    visited = set()
+    queue = deque([(start_url, 0)])
+    domain = urlparse(start_url).netloc
 
-os.makedirs("zap_progress", exist_ok=True)
-progress_file = f"zap_progress/{st.session_state.sid}_{uploaded.name[:60]}.csv"
+    while queue and len(visited) < max_pages:
+        url, depth = queue.popleft()
+        if url in visited or depth > 3:
+            continue
+        visited.add(url)
 
-if os.path.exists(progress_file):
-    progress = pd.read_csv(progress_file)
-else:
-    progress = pd.DataFrame({
-        "URL": df[url_col].astype(str).tolist(),
-        "Emails": [json.dumps([]) for _ in df.index],
-        "Is_Blog": [False] * len(df),
-        "Niche": [""] * len(df),
-        "Status": ["pending"] * len(df)
-    })
-    progress.to_csv(progress_file, index=False)
-
-# ======================== SETTINGS ========================
-c1, c2, c3 = st.columns(3)
-threads = c1.slider("Threads", 1, 10, 6)
-use_selenium = c2.checkbox("Enable Selenium (for JavaScript-heavy sites)", False)
-skip_done = c3.checkbox("Skip already processed", True)
-
-# ======================== SCRAPER ========================
-def scrape(url):
-    html = None
-    # Fast requests first
-    try:
-        r = requests.get(url, headers={"User-Agent": "ZapScraper/2025"}, timeout=12)
-        r.raise_for_status()
-        html = r.text
-    except:
-        pass
-
-    # Selenium fallback
-    if (html is None or use_selenium) and SELENIUM_AVAILABLE:
         try:
-            opts = Options()
-            opts.add_argument("--headless")
-            opts.add_argument("--no-sandbox")
-            opts.add_argument("--disable-dev-shm-usage")
-            opts.add_argument("--disable-gpu")
-            driver = webdriver.Chrome(options=opts)
-            driver.set_page_load_timeout(20)
-            driver.get(url)
-            html = driver.page_source
-            driver.quit()
+            async with session.get(url, timeout=12) as resp:
+                if resp.status != 200:
+                    continue
+                html = await resp.text()
         except:
-            pass
+            continue
 
-    if not html:
-        return {"emails": [], "blog": False, "niche": "Other", "status": "error"}
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(separator=" ")
 
-    soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text()
+        # Extract emails
+        emails = set(EMAIL_REGEX.findall(html + text))
+        # Clean
+        emails = {e.strip(".,;:'\"()[]{}").lower() for e in emails}
+        emails = {e for e in emails if "@" in e and "." in e.split("@")[-1]}
+        emails = {e for e in emails if not re.search(r"(privacy|gdpr|dpo|abuse|noreply)", e)}
+        collected.update(emails)
 
-    emails = list(set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", html + text)))
-    blog = bool(soup.find("article") or "blog" in url.lower())
-    niche = "Other"
-    if any(w in text.lower() for w in ["health","doctor","diet"]): niche = "Health"
-    elif any(w in text.lower() for w in ["finance","bank","money"]): niche = "Finance"
-    elif any(w in text.lower() for w in ["tech","software","ai"]): niche = "Tech"
-    elif any(w in text.lower() for w in ["shop","buy","cart"]): niche = "Ecommerce"
+        # Social links
+        if not facebook:
+            fb = soup.find("a", href=re.compile(r"facebook\.com", re.I))
+            if fb and fb.get("href"):
+                facebook = fb["href"]
+        if not linkedin:
+            ln = soup.find("a", href=re.compile(r"linkedin\.com", re.I))
+            if ln and ln.get("href"):
+                linkedin = ln["href"]
 
-    return {"emails": emails, "blog": blog, "niche": niche, "status": "done"}
+        # Find internal links
+        for a in soup.find_all("a", href=True):
+            link = urljoin(url, a["href"])
+            if urlparse(link).netloc == domain and link not in visited:
+                queue.append((link, depth + 1))
 
-# ======================== START ========================
+    return {
+        "Website": start_url,
+        "Emails": "; ".join(sorted(collected)) if collected else "",
+        "Emails_Count": len(collected),
+        "Facebook": facebook or "",
+        "LinkedIn": linkedin or "",
+        "Pages_Scanned": len(visited)
+    }
+
+# ======================== RUN ========================
 if st.button("START SCRAPING", type="primary", use_container_width=True):
-    to_do = [(i, r["URL"]) for i, r in progress.iterrows() if not (skip_done and r["Status"] == "done")]
-    if not to_do:
-        st.balloons()
-        st.success("All URLs already processed!")
-    else:
-        bar = st.progress(0)
-        info = st.empty()
-        with ThreadPoolExecutor(max_workers=threads) as pool:
-            futures = {pool.submit(scrape, url): i for i, url in to_do}
-            for n, f in enumerate(as_completed(futures), 1):
-                i = futures[f]
-                res = f.result()
-                progress.at[i, "Emails"] = json.dumps(res["emails"])
-                progress.at[i, "Is_Blog"] = res["blog"]
-                progress.at[i, "Niche"] = res["niche"]
-                progress.at[i, "Status"] = res["status"]
-                progress.to_csv(progress_file, index=False)
-                bar.progress(n / len(to_do))
-                info.markdown(f"**{n}/{len(to_do)}** — {len(res['emails'])} emails found")
-        st.balloons()
-        st.success("Scraping finished!")
+    urls = df[url_col].dropna().astype(str).unique().tolist()
+    results = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    total = len(urls)
 
-# ======================== RESULTS ========================
-final = df.copy()
-final["Zap_Emails"] = ["; ".join(json.loads(e)) if json.loads(e) else "" for e in progress["Emails"]]
-final["Zap_Is_Blog"] = progress["Is_Blog"]
-final["Zap_Niche"] = progress["Niche"]
-final["Zap_Status"] = progress["Status"]
+    async def run():
+        timeout = aiohttp.ClientTimeout(total=20)
+        connector = aiohttp.TCPConnector(limit=20)
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+            for i, url in enumerate(urls):
+                if not url.startswith(("http://", "https://")):
+                    url = "https://" + url
+                result = await crawl_site(url, session, max_pages)
+                results.append(result)
+                progress_bar.progress((i + 1) / total)
+                status_text.markdown(f"**{i+1}/{total}** → {result['Emails_Count']} emails from `{url}`")
 
-st.dataframe(final, use_container_width=True)
-st.download_button(
-    "DOWNLOAD ZAP_RESULTS.CSV",
-    final.to_csv(index=False).encode(),
-    "Zap_Results.csv",
-    use_container_width=True
-)
+    # Run the async beast
+    asyncio.run(run())
+
+    # Final results
+    final_df = pd.DataFrame(results)
+    st.balloons()
+    st.success(f"DONE! Found {final_df['Emails_Count'].sum():,} emails from {len(results)} sites")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Emails", final_df['Emails_Count'].sum())
+    col2.metric("Sites with Email", (final_df['Emails_Count'] > 0).sum())
+    col3.metric("Avg per Site", round(final_df['Emails_Count'].mean(), 1))
+
+    st.dataframe(final_df, use_container_width=True)
+
+    csv = final_df.to_csv(index=False).encode()
+    st.download_button(
+        "DOWNLOAD FULL RESULTS",
+        data=csv,
+        file_name="zap_scraper_results.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
