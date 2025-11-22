@@ -153,40 +153,51 @@ def fetch_with_selenium(url):
 
 
 def scrape_single(url, use_selenium_fallback=True):
-    result = {"url": url, "emails": [], "is_blog": False, "niche": "", "status": "error", "error": ""}
+    result = {
+        "url": url,
+        "emails": [],
+        "is_blog": False,
+        "niche": "",
+        "status": "error",
+        "error": ""
+    }
     try:
         html = None
-        # Try fast requests first
+        # 1. Try fast requests first
         try:
             html = fetch_with_requests(url)
             result["status"] = "done"
         except Exception as e:
-            result["error"] = f"requests failed: {str(e)}"
+            result["error"] = f"requests failed: {e}"
             if not use_selenium_fallback or not SELENIUM_AVAILABLE:
                 return result
-            # Selenium fallback
+
+            # 2. Selenium fallback
             try:
                 html = fetch_with_selenium(url)
                 result["status"] = "done (selenium)"
             except Exception as e2:
-                result["error"] = f"selenium failed: {str(e2)}"
+                result["error"] = f"selenium failed: {e2}"
                 return result
 
+        # Parse with BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(separator=" ")
 
-        # Extract emails
-        emails = extract_emails_from_text(html + text)
+        # Extract emails from raw HTML + visible text
+        emails = extract_emails_from_text(html + " " + text)
         result["emails"] = emails
 
-        # Blog + niche detection
+        # Detect if it's a blog and which niche
         result["is_blog"] = is_likely_blog(soup, text, url)
         result["niche"] = detect_niche(text)
+        result["status"] = "done"
 
-    except Exception as e:
-        result["error"] = str(e)
+    except Exception as unexpected:
+        result["error"] = str(unexpected)
 
     return result
+    
 " + text)
         result["emails"] = emails
         result["is_blog"] = is_likely_blog(soup, text, url)
