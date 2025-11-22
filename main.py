@@ -31,7 +31,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<h1 class="big-title">Zap Scraper</h1>', unsafe_allow_html=True)
-st.markdown("**Instant email extractor • Blog & niche detection • Resume anytime**")
+st.markdown("**Instant email extractor • Blog & niche detection Resume anytime**")
 
 # ======================== UPLOAD ========================
 uploaded = st.file_uploader("Upload CSV or Excel with URLs", type=["csv","xlsx","xls"])
@@ -39,7 +39,7 @@ if not uploaded:
     st.stop()
 
 df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
-st.success(f"Loaded {len(df):,} URLs}")
+st.success(f"Loaded {len(df)} URLs")
 st.dataframe(df.head(10), use_container_width=True)
 
 url_col = st.selectbox("Select the column that contains URLs", options=df.columns)
@@ -72,7 +72,7 @@ skip_done = c3.checkbox("Skip already processed", True)
 # ======================== SCRAPER ========================
 def scrape(url):
     html = None
-    # 1. Fast requests
+    # Fast requests first
     try:
         r = requests.get(url, headers={"User-Agent": "ZapScraper/2025"}, timeout=12)
         r.raise_for_status()
@@ -80,7 +80,7 @@ def scrape(url):
     except:
         pass
 
-    # 2. Selenium fallback
+    # Selenium fallback
     if (html is None or use_selenium) and SELENIUM_AVAILABLE:
         try:
             opts = Options()
@@ -114,7 +114,7 @@ def scrape(url):
 
 # ======================== START ========================
 if st.button("START SCRAPING", type="primary", use_container_width=True):
-    to_do = [(i, r["URL]) for i, r in progress.iterrows() if not (skip_done and r["Status"] == "done")]
+    to_do = [(i, r["URL"]) for i, r in progress.iterrows() if not (skip_done and r["Status"] == "done")]
     if not to_do:
         st.balloons()
         st.success("All URLs already processed!")
@@ -138,7 +138,7 @@ if st.button("START SCRAPING", type="primary", use_container_width=True):
 
 # ======================== RESULTS ========================
 final = df.copy()
-final["Zap_Emails"] = [("; ".join(json.loads(e)) if json.loads(e) else "") for e in progress["Emails"]]
+final["Zap_Emails"] = ["; ".join(json.loads(e)) if json.loads(e) else "" for e in progress["Emails"]]
 final["Zap_Is_Blog"] = progress["Is_Blog"]
 final["Zap_Niche"] = progress["Niche"]
 final["Zap_Status"] = progress["Status"]
