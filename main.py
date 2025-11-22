@@ -156,25 +156,37 @@ def scrape_single(url, use_selenium_fallback=True):
     result = {"url": url, "emails": [], "is_blog": False, "niche": "", "status": "error", "error": ""}
     try:
         html = None
-        # try requests first
+        # Try fast requests first
         try:
             html = fetch_with_requests(url)
-            result["status"] = "requests_ok"
+            result["status"] = "done"
         except Exception as e:
-            if SELENIUM_AVAILABLE and use_selenium_fallback:
-                try:
-                    html = fetch_with_selenium(url)
-                    result["status"] = "selenium_ok"
-                except Exception as se:
-                    result["error"] = f"selenium_failed:{se}"
-                    return result
-            else:
-                result["error"] = f"requests_failed:{e}"
+            result["error"] = f"requests failed: {str(e)}"
+            if not use_selenium_fallback or not SELENIUM_AVAILABLE:
+                return result
+            # Selenium fallback
+            try:
+                html = fetch_with_selenium(url)
+                result["status"] = "done (selenium)"
+            except Exception as e2:
+                result["error"] = f"selenium failed: {str(e2)}"
                 return result
 
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(separator=" ")
-        emails = extract_emails_from_text(html + "
+
+        # Extract emails
+        emails = extract_emails_from_text(html + text)
+        result["emails"] = emails
+
+        # Blog + niche detection
+        result["is_blog"] = is_likely_blog(soup, text, url)
+        result["niche"] = detect_niche(text)
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 " + text)
         result["emails"] = emails
         result["is_blog"] = is_likely_blog(soup, text, url)
