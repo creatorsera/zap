@@ -29,38 +29,8 @@ zap-scraper/
 
 ---
 
-## 🛠 Installation
-1. Clone the repo:
-```bash
-git clone https://github.com/your-username/zap-scraper
-cd zap-scraper
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Run Streamlit:
-```bash
-streamlit run main.py
-```
 
 ---
-
-## 🌐 Deploy on Streamlit Cloud
-1. Push all files to your GitHub repo.
-2. Go to: https://share.streamlit.io
-3. Click **Create App**.
-4. Select:
-   - Repo: `your-username/zap-scraper`
-   - Branch: `main`
-   - File: `main.py`
-
-5. Deploy 🎉
-
----
-
 ## 📊 Output CSV
 Zap exports data into:
 ```
@@ -76,13 +46,6 @@ Containing:
 - Timestamp
 
 ---
-
-## 🔥 Screenshots (Optional)
-Add your screenshots here:
-```
-/images/home.png
-/images/results.png
-```
 
 ---
 
