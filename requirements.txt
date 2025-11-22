@@ -1,5 +1,5 @@
 streamlit
-pandas==2.0.3
+pandas==2.2.3
 requests>=2.30.0
 beautifulsoup4
 tldextract==5.1.2
