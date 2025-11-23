@@ -36,7 +36,7 @@ if "serper_key" not in st.session_state: st.session_state.serper_key = ""
 
 # ======================== HELPERS ========================
 EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
-PHONE_REGEX = re.compile(r"\\+?\\d{1,4}?[-.\\s]?\\(?\\d{1,4}?\\)?[-.\\s]?\\d{3,4}[-.\\s]?\\d{4,9}")
+PHONE_REGEX = re.compile(r'\b(?:\+?(\d{1,3}))?[\-.\s]?(\d{1,4})?[\-.\s]?(\d{1,4})?[\-.\s]?(\d{1,4})?[\-.\s]?(\d{1,9})\b')
 GUEST_POST_REGEX = re.compile(r"write for us|guest post|contributor|submit.*article|blog.*submission", re.I)
 
 def save_progress():
