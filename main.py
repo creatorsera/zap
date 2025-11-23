@@ -7,6 +7,7 @@ import json
 import asyncio
 import aiohttp
 import time
+import base64
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from collections import deque
