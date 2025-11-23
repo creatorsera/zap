@@ -43,6 +43,11 @@ PHONE_REGEX = re.compile(r'(?:\+?\d{1,3})?[\-.\s]?(?:\d{1,4})?[\-.\s]?\d{3,4}[\-
 GUEST_REGEX = re.compile(r"(write for us|guest post|submit article|contributor guidelines|blog submission)", re.I)
 
 # ======================== HELPERS ========================
+def download_link(df, filename="zap_results.csv"):
+    csv = df.to_csv(index=False).encode()
+    b64 = base64.b64encode(csv).decode()
+    return f'<a href="data:text/csv;base64,{b64}" download="{filename}">Download {filename}</a>'
+    
 def save_progress():
     if st.session_state.results:
         pd.DataFrame(st.session_state.results).to_csv("zap_progress.csv", index=False)
