@@ -26,6 +26,9 @@ REQUEST_TIMEOUT = 15
 PROGRESS_DIR = "zap_progress"
 os.makedirs(PROGRESS_DIR, exist_ok=True)
 
+# Developer-provided uploaded file path (local). The deployment environment can transform this path to a URL if needed.
+DEFAULT_UPLOADED_PATH = "/mnt/data/sdcjkdncksdncwnt245090fkerfjfacebookkrenfjkrenemailfere-ejewjroejrowe-main (1).zip"
+
 # Niche keywords (extendable)
 NICHE_KEYWORDS = {
     "Health": ["health","fitness","doctor","symptom","recipe","diet","workout","wellness","medical","clinic"],
@@ -133,6 +136,7 @@ def scrape_single(url, use_selenium_fallback=True):
     result = {"url": url, "emails": [], "is_blog": False, "niche": "", "status": "error", "error": ""}
     try:
         html = None
+        # try requests first
         try:
             html = fetch_with_requests(url)
             result["status"] = "done"
